@@ -5,7 +5,7 @@ const ejs = require("ejs");
 const mongoose = require("mongoose");
 const session = require("express-session");
 const passport = require("passport");
-//const LocalStrategy = require("passport-local");
+const LocalStrategy = require("passport-local");
 const GoogleStrategy = require('passport-google-oauth20').Strategy;
 const passportLocalMongoose = require("passport-local-mongoose");
 const findOrCreate = require('mongoose-findorcreate')
@@ -39,7 +39,8 @@ mongoose.set("useCreateIndex", true);
 const userSchema = new mongoose.Schema({
     email: String,
     password: String,
-    googleId: String
+    googleId: String,
+    secret: String
 });
 
 userSchema.plugin(passportLocalMongoose);
@@ -48,7 +49,7 @@ userSchema.plugin(findOrCreate);
 
 const User = new mongoose.model("User", userSchema);
 
-//passport.use(new LocalStrategy(User.authenticate()));
+passport.use(new LocalStrategy(User.authenticate()));
 passport.serializeUser(function(user, done) {
     done(null, user);
   });
@@ -64,7 +65,6 @@ passport.use(new GoogleStrategy({
    // userProfileURL:"https://**www**.googleapis.com/oauth2/v3/userinfo"
   },
   function(accessToken, refreshToken, profile, cb) {
-      console.log(profile);
     User.findOrCreate({ googleId: profile.id }, function (err, user) {
       return cb(err, user);
     });
@@ -99,8 +99,25 @@ app.get("/register", function(req, res){
 });
 
 app.get("/secrets", function(req, res){
-    if (req.isAuthenticated()) {
+   /* if (req.isAuthenticated()) {
         res.render("secrets");
+    } else {
+        res.redirect("/login");
+    } */
+    User.find({"secret": {$ne: null}}, function(err, foundusers){
+        if(err) {
+            console.log(err);
+        } else {
+            if(foundusers){
+                res.render("secrets", {usersWithSecrets: foundusers});
+            }
+        }
+    });
+});
+
+app.get("/submit", function(req, res){
+    if (req.isAuthenticated()) {
+        res.render("submit");
     } else {
         res.redirect("/login");
     }
@@ -109,6 +126,25 @@ app.get("/secrets", function(req, res){
 app.get("/logout", function(req, res){
     req.logout();
     res.redirect("/");
+});
+
+app.post("/submit", function(req, res){
+    const submittedSecret = req.body.secret;
+    
+    console.log(req.user._id);
+
+    User.findById(req.user._id, function(err, foundUser){
+        if(err){
+            console.log(err);
+        } else {
+            if(foundUser){
+                foundUser.secret = submittedSecret;
+                foundUser.save(function() {
+                    res.redirect("/secrets");
+                });
+            }
+        }
+    });
 });
 
 app.post("/register", function(req, res){
